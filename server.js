@@ -2,6 +2,7 @@ const Bun = require('bun');
 const { Hono } = require('hono');
 const { serveStatic } = require('hono/bun');
 const path = require('path');
+import prettyMilliseconds from 'pretty-ms';
 
 const port = Bun.env.PORT || 3000;
 const uploadDir = 'uploads';
@@ -13,11 +14,13 @@ const transcripts = [];
 
 const transcribe = async fileName => {
   console.log('Starting transcription', fileName);
+  const startTime = Date.now();
   if (process.platform === 'darwin') { // Needed for whisperx on macOS
     await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 --compute_type int8 ${fileName}`.cwd('uploads').quiet(); 
   } else {
     await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 ${fileName}`.cwd('uploads').quiet();
   }
+  const endTime = Date.now();
   console.log('Completed transcription', fileName);
 
   let textFileName;
@@ -31,7 +34,7 @@ const transcribe = async fileName => {
   const transcriptContent = await Bun.file(textFilePath).text();
 
   inProgress.splice(inProgress.indexOf(fileName), 1);
-  transcripts.push({ fileName, textFileName, transcript: transcriptContent});
+  transcripts.push({ fileName, textFileName, transcript: transcriptContent, runtime: prettyMilliseconds(endTime - startTime)});
 }
 
 const processQueue = async () => {
@@ -72,7 +75,7 @@ app.get('/', c => {
         </ul>
         <h2>Current Transcripts</h2>
         <ul>
-          ${transcripts.map(t => `<li><a href="/transcripts/${t.textFileName}" download>${t.textFileName}</a></li>`).join('')}
+          ${transcripts.map(t => `<li><a href="/transcripts/${t.textFileName}" download>${t.textFileName}</a> in ${t.runtime}</li>`).join('')}
         </ul>
       </body>
     </html>

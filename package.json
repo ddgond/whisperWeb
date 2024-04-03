@@ -9,6 +9,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "hono": "^4.2.1"
+    "hono": "^4.2.1",
+    "pretty-ms": "^9.0.0"
   }
 }
