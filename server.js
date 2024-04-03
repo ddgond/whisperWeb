@@ -62,6 +62,10 @@ app.get('/', c => {
         <a href="/">
           <button>Refresh</button>
         </a>
+        <h2>Queued</h2>
+        <ul>
+          ${queued.map(fileName => `<li>${fileName}</li>`).join('')}
+        </ul>
         <h2>In Progress</h2>
         <ul>
           ${inProgress.map(fileName => `<li>${fileName}</li>`).join('')}
