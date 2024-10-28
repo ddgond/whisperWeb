@@ -1,136 +1,115 @@
-const Bun = require('bun');
-const { Hono } = require('hono');
-const { serveStatic } = require('hono/bun');
-const path = require('path');
-import prettyMilliseconds from 'pretty-ms';
+const Bun = require("bun");
+const { Hono } = require("hono");
+const { serveStatic } = require("hono/bun");
+const path = require("path");
+import prettyMilliseconds from "pretty-ms";
 
 const port = Bun.env.PORT || 3000;
-const uploadDir = 'uploads';
+const uploadDir = "uploads";
 
 const uploads = [];
 const queued = [];
 const inProgress = [];
 const transcripts = [];
 
-const transcribe = async fileName => {
-  console.log('Starting transcription', fileName);
-  const startTime = Date.now();
-  if (process.platform === 'darwin') { // Needed for whisperx on macOS
-    await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 --compute_type int8 ${fileName}`.cwd('uploads').quiet(); 
-  } else {
-    await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 ${fileName}`.cwd('uploads').quiet();
-  }
-  const endTime = Date.now();
-  console.log('Completed transcription', fileName);
+const transcribe = async (fileName) => {
+	console.log("Starting transcription", fileName);
+	const startTime = Date.now();
+	if (process.platform === "darwin") {
+		// Needed for whisperx on macOS
+		await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 --compute_type int8 ${fileName}`
+			.cwd("uploads")
+			.quiet();
+	} else {
+		await Bun.$`${Bun.env.WHISPERX_PATH} --model large-v3 ${fileName}`
+			.cwd("uploads")
+			.quiet();
+	}
+	const endTime = Date.now();
+	console.log("Completed transcription", fileName);
 
-  let textFileName;
-  if (fileName.includes('.')) {
-    textFileName = fileName.split('.').slice(0, -1).join('.') + '.txt';
-  } else {
-    textFileName = fileName + '.txt';
-  }
+	let textFileName;
+	if (fileName.includes(".")) {
+		textFileName = fileName.split(".").slice(0, -1).join(".") + ".txt";
+	} else {
+		textFileName = fileName + ".txt";
+	}
 
-  const textFilePath = path.join(uploadDir, textFileName);
-  const transcriptContent = await Bun.file(textFilePath).text();
+	const textFilePath = path.join(uploadDir, textFileName);
+	const transcriptContent = await Bun.file(textFilePath).text();
 
-  inProgress.splice(inProgress.indexOf(fileName), 1);
-  transcripts.push({ fileName, textFileName, transcript: transcriptContent, runtime: prettyMilliseconds(endTime - startTime)});
-}
-
-const processQueue = async () => {
-  if (queued.length > 0 && inProgress.length === 0) {
-    const fileName = queued.shift();
-    inProgress.push(fileName);
-    transcribe(fileName);
-  }
+	inProgress.splice(inProgress.indexOf(fileName), 1);
+	transcripts.push({
+		fileName,
+		textFileName,
+		transcript: transcriptContent,
+		runtime: prettyMilliseconds(endTime - startTime),
+	});
 };
 
-
+const processQueue = async () => {
+	if (queued.length > 0 && inProgress.length === 0) {
+		const fileName = queued.shift();
+		inProgress.push(fileName);
+		transcribe(fileName);
+	}
+};
 
 const app = new Hono();
 
-app.get('/', c => {
-  const html = `
-    <html>
-      <head>
-        <title>WhisperX</title>
-      </head>
-      <body>
-        <h1>WhisperX</h1>
-        <h2>Upload File</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-          <input type="file" name="file"/>
-          <button type="submit">Upload</button>
-        </form>
-        <a href="/">
-          <button>Refresh</button>
-        </a>
-        <h2>Queued</h2>
-        <ul>
-          ${queued.map(fileName => `<li>${fileName}</li>`).join('')}
-        </ul>
-        <h2>In Progress</h2>
-        <ul>
-          ${inProgress.map(fileName => `<li>${fileName}</li>`).join('')}
-        </ul>
-        <h2>Current Transcripts</h2>
-        <ul>
-          ${transcripts.map(t => `<li><a href="/transcripts/${t.textFileName}" download>${t.textFileName}</a> in ${t.runtime}</li>`).join('')}
-        </ul>
-      </body>
-    </html>
-  `;
-  return c.html(html);
+app.use("/*", serveStatic({ root: "./public" }));
+
+app.post("/api/upload", async (c) => {
+	const body = await c.req.parseBody();
+	const file = body["file"];
+
+	if (!file) {
+		return c.json({ error: "No file uploaded" }, 400);
+	}
+
+	uploads.push(file.name);
+
+	const filePath = path.join(uploadDir, file.name);
+	await Bun.write(filePath, file);
+	console.log("Received file", file.name);
+
+	uploads.splice(uploads.indexOf(file.name), 1);
+	queued.push(file.name);
+
+	processQueue();
+
+	return c.json({ success: true });
 });
 
-app.post('/upload', async c => {
-  const body = await c.req.parseBody();
-  const file = body['file'];
-
-  if (!file) {
-    return c.text('No file uploaded', 400);
-  }
-
-  uploads.push(file.name);
-  
-  const filePath = path.join(uploadDir, file.name);
-  await Bun.write(filePath, file);
-  console.log('Received file', file.name);
-  
-  uploads.splice(uploads.indexOf(file.name), 1);
-  queued.push(file.name);
-
-  processQueue();
-
-  return c.redirect('/');
+app.get("/api/status", (c) => {
+	return c.json({
+		queued,
+		inProgress,
+		transcripts,
+	});
 });
 
-app.get('/transcripts', c => {
-  return c.json(transcripts);
-});
+app.get("/api/transcripts/:textFileName", (c) => {
+	const textFileName = c.req.param("textFileName");
+	const entry = transcripts.find((t) => t.textFileName === textFileName);
 
-app.get('/transcripts/:textFileName', c => {
-  const textFileName = c.req.param('textFileName');
-  const entry = transcripts.find(t => t.textFileName === textFileName);
+	if (!entry) {
+		return c.json({ error: "Transcript not found" }, 404);
+	}
 
-  if (!entry) {
-    return c.text('Transcript not found', 404);
-  }
-
-  return c.text(entry.transcript);
+	return c.text(entry.transcript);
 });
 
 app.onError((err, c) => {
-  return c.text('Internal Server Error', 500);
+	console.error(err);
+	return c.json({ error: "Internal Server Error" }, 500);
 });
-
-
 
 setInterval(processQueue, 1000);
 
 console.log(`Server running on port ${port}`);
 
 export default {
-  port,
-  fetch: app.fetch
-}
+	port,
+	fetch: app.fetch,
+};

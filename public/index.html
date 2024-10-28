@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhisperX Transcription</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>WhisperX Transcription</h1>
+    </header>
+
+    <main>
+      <section class="upload-section">
+        <h2>Upload Audio File</h2>
+        <form id="uploadForm" class="upload-form">
+          <div class="file-input-wrapper">
+            <input type="file" id="fileInput" name="file" accept="audio/*,video/*" />
+            <div class="drop-zone">
+              <p class="drop-message">Drag & drop files here or click to browse</p>
+              <p class="selected-file" style="display: none;"></p>
+            </div>
+          </div>
+          <button type="submit" id="uploadButton">Upload</button>
+        </form>
+      </section>
+
+      <div class="status-grid">
+        <section class="status-section">
+          <h2>Queue</h2>
+          <ul id="queueList" class="status-list"></ul>
+        </section>
+
+        <section class="status-section">
+          <h2>In Progress</h2>
+          <ul id="progressList" class="status-list"></ul>
+        </section>
+
+        <section class="status-section">
+          <h2>Completed</h2>
+          <ul id="transcriptList" class="status-list"></ul>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="/main.js"></script>
+</body>
+
+</html>
