@@ -112,4 +112,5 @@ console.log(`Server running on port ${port}`);
 export default {
 	port,
 	fetch: app.fetch,
+	maxRequestBodySize: 1024 * 1024 * 1024 // 1 GB
 };
